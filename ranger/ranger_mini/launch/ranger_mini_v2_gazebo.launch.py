@@ -31,7 +31,7 @@ def generate_launch_description():
   ############ You do not need to change anything below this line #############
  
   # Set the path to different files and folders.  
-  pkg_gazebo_ros = FindPackageShare(package='gazebo_ros').find('gazebo_ros')   
+  #pkg_gazebo_ros = FindPackageShare(package='gazebo_ros').find('gazebo_ros')   
   pkg_share = FindPackageShare(package=package_name).find(package_name)
   default_urdf_model_path = os.path.join(pkg_share, urdf_file_path)
   default_rviz_config_path = os.path.join(pkg_share, rviz_config_file_path)
@@ -132,35 +132,53 @@ def generate_launch_description():
     parameters=[{'use_sim_time': use_sim_time}])
 
   # Launch RViz
-  start_rviz_cmd = Node(
-    package='rviz2',
-    executable='rviz2',
-    name='rviz2',
-    output='screen',
-    arguments=['-d', rviz_config_file])
+  # start_rviz_cmd = Node(
+  #   package='rviz2',
+  #   executable='rviz2',
+  #   name='rviz2',
+  #   output='screen',
+  #   arguments=['-d', rviz_config_file])
  
-  # Start Gazebo server
-  start_gazebo_server_cmd = IncludeLaunchDescription(
-    PythonLaunchDescriptionSource(os.path.join(pkg_gazebo_ros, 'launch', 'gzserver.launch.py')),
-    condition=IfCondition(use_simulator),
-    launch_arguments={'world': world}.items())
+  # Gazebo Classic
+  # # Start Gazebo server
+  # start_gazebo_server_cmd = IncludeLaunchDescription(
+  #   PythonLaunchDescriptionSource(os.path.join(pkg_gazebo_ros, 'launch', 'gzserver.launch.py')),
+  #   condition=IfCondition(use_simulator),
+  #   launch_arguments={'world': world}.items())
  
-  # Start Gazebo client    
-  start_gazebo_client_cmd = IncludeLaunchDescription(
-    PythonLaunchDescriptionSource(os.path.join(pkg_gazebo_ros, 'launch', 'gzclient.launch.py')),
-    condition=IfCondition(PythonExpression([use_simulator, ' and not ', headless])))
+  # # Start Gazebo client    
+  # start_gazebo_client_cmd = IncludeLaunchDescription(
+  #   PythonLaunchDescriptionSource(os.path.join(pkg_gazebo_ros, 'launch', 'gzclient.launch.py')),
+  #   condition=IfCondition(PythonExpression([use_simulator, ' and not ', headless])))
  
-  # Launch the robot
-  spawn_entity_cmd = Node(
-    package='gazebo_ros', 
-    executable='spawn_entity.py',
-    arguments=['-entity', robot_name_in_model, 
-                '-topic', 'robot_description',
-                    '-x', spawn_x_val,
-                    '-y', spawn_y_val,
-                    '-z', spawn_z_val,
-                    '-Y', spawn_yaw_val],
-                    output='screen')
+  # # Launch the robot
+  # spawn_entity_cmd = Node(
+  #   package='gazebo_ros', 
+  #   executable='spawn_entity.py',
+  #   arguments=['-entity', robot_name_in_model, 
+  #               '-topic', 'robot_description',
+  #                   '-x', spawn_x_val,
+  #                   '-y', spawn_y_val,
+  #                   '-z', spawn_z_val,
+  #                   '-Y', spawn_yaw_val],
+  #                   output='screen')
+
+  # Spawn in Gazebo harmonic
+  spawn_ranger_mini = Node(
+      package="ros_gz_sim",
+      executable="create",
+      namespace=namespace,
+      arguments=[
+          '-name', f'{namespace}',
+          '-topic', 'robot_description',
+          '-x', '0',
+          '-y', '2',
+          '-z', '1',
+          '--ros-args', '--log-level', 'info'
+      ],
+      parameters=[{"use_sim_time": True}],
+      output='screen'
+  )
  
   controller = IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
@@ -205,9 +223,10 @@ def generate_launch_description():
   ld.add_action(declare_world_cmd)
  
   # Add any actions
-  ld.add_action(start_gazebo_server_cmd)
-  ld.add_action(start_gazebo_client_cmd)
-  ld.add_action(spawn_entity_cmd)
+  # ld.add_action(start_gazebo_server_cmd)
+  # ld.add_action(start_gazebo_client_cmd)
+  # ld.add_action(spawn_entity_cmd)
+  ld.add_action(spawn_ranger_mini)
   ld.add_action(start_robot_state_publisher_cmd)
   ld.add_action(start_joint_state_publisher_cmd)
   ld.add_action(controller)
@@ -218,6 +237,6 @@ def generate_launch_description():
 
 
   # ld.add_action(start_dummy_sensors)
-  ld.add_action(start_rviz_cmd)
+  # ld.add_action(start_rviz_cmd)
  
   return ld
