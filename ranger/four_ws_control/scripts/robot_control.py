@@ -16,6 +16,9 @@ class Commander(Node):
 
     def __init__(self):
         super().__init__('commander')
+
+        self.namespace = self.get_namespace()
+
         timer_period = 0.02
         self.wheel_seperation = 0.494
         self.wheel_base = 0.364
@@ -26,8 +29,8 @@ class Commander(Node):
         self.pos = np.array([0,0,0,0], float)
         self.vel = np.array([0,0,0,0], float) #left_front, right_front, left_rear, right_rear
 
-        self.pub_pos = self.create_publisher(Float64MultiArray, '/forward_position_controller/commands', 10)
-        self.pub_vel = self.create_publisher(Float64MultiArray, '/forward_velocity_controller/commands', 10)
+        self.pub_pos = self.create_publisher(Float64MultiArray, self.namespace + '/forward_position_controller/commands', 10)
+        self.pub_vel = self.create_publisher(Float64MultiArray, self.namespace + '/forward_velocity_controller/commands', 10)
         self.timer = self.create_timer(timer_period, self.timer_callback)
 
     def timer_callback(self):
@@ -122,7 +125,10 @@ class Joy_subscriber(Node):
 class Teleop_sub(Node):
     def __init__(self):
         super().__init__('teleop_sub')
-        self.subscription = self.create_subscription(Twist,'cmd_vel',self.cmd_callback,10)
+
+        self.namespace = self.get_namespace()
+
+        self.subscription = self.create_subscription(Twist, self.namespace + '/cmd_vel',self.cmd_callback,10)
         self.subscription
     def cmd_callback(self,msg):
         global msg_vel, mode_selection

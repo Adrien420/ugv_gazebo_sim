@@ -11,6 +11,9 @@ controller_manager:
     forward_velocity_controller:
       type: forward_command_controller/ForwardCommandController
 
+    ptz_camera_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+
 forward_position_controller:
   ros__parameters:
     joints:
@@ -38,3 +41,17 @@ forward_velocity_controller:
     state_interfaces:
       - position
       - velocity
+
+ptz_camera_controller:
+  ros__parameters:
+    joints:
+      - ranger_mini_camera_pan_joint
+      - ranger_mini_camera_tilt_joint
+    command_interfaces:
+      - position
+    state_interfaces:
+      - position
+      - velocity
+    gains:
+      ranger_mini_camera_pan_joint: {p: 100.0, i: 0.01, d: 10.0}
+      ranger_mini_camera_tilt_joint: {p: 100.0, i: 0.01, d: 10.0}

@@ -1,242 +1,172 @@
 
  
-import os
+import os, yaml
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, ExecuteProcess, IncludeLaunchDescription
-from launch.conditions import IfCondition, UnlessCondition
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction, TimerAction, RegisterEventHandler
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import Command, LaunchConfiguration, PythonExpression
+from launch.substitutions import Command, LaunchConfiguration
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 from launch.substitutions import PathJoinSubstitution
+from launch_ros.parameter_descriptions import ParameterValue
+from launch.event_handlers import OnProcessExit
 from ament_index_python.packages import get_package_share_directory
 
-def generate_launch_description():
- 
-  # Constants for paths to different files and folders
-  gazebo_models_path = 'models'
-  package_name = 'ranger_mini'
-  robot_name_in_model = 'ranger_mini_v2'
-  rviz_config_file_path = 'rviz/urdf.rviz'
-  urdf_file_path = 'urdf/ranger_mini_gazebo.xacro'
-  world_file_path = 'worlds/neighborhood.world'
-  urdf_file_name = 'ranger_mini_gazebo.xacro'
+def generate_yaml_with_namespace(context, ranger_id):
+    namespace = f"ranger_mini_{ranger_id}"
+    original_yaml_path = os.path.join(
+        FindPackageShare("ranger_mini").perform(context),
+        "config",
+        "ranger_mini_joint.yaml"
+    )
+    namespaced_yaml_path = f"/tmp/{namespace}_control.yaml"
 
-  # Pose where we want to spawn the robot
-  spawn_x_val = '0.0'
-  spawn_y_val = '0.0'
-  spawn_z_val = '0.0'
-  spawn_yaw_val = '0.00'
- 
-  ############ You do not need to change anything below this line #############
- 
-  # Set the path to different files and folders.  
-  #pkg_gazebo_ros = FindPackageShare(package='gazebo_ros').find('gazebo_ros')   
-  pkg_share = FindPackageShare(package=package_name).find(package_name)
-  default_urdf_model_path = os.path.join(pkg_share, urdf_file_path)
-  default_rviz_config_path = os.path.join(pkg_share, rviz_config_file_path)
-  world_path = os.path.join(pkg_share, world_file_path)
-  gazebo_models_path = os.path.join(pkg_share, gazebo_models_path)
-  os.environ["GAZEBO_MODEL_PATH"] = gazebo_models_path
-  pkg_four_ws_control = get_package_share_directory('four_ws_control')
-  
-  # Launch configuration variables specific to simulation
-  use_sim_time = LaunchConfiguration('use_sim_time', default='true')
-  gui = LaunchConfiguration('gui')
-  headless = LaunchConfiguration('headless')
-  namespace = LaunchConfiguration('namespace')
-  rviz_config_file = LaunchConfiguration('rviz_config_file')
-  urdf_model = LaunchConfiguration('urdf_model')
-  use_namespace = LaunchConfiguration('use_namespace')
-  use_robot_state_pub = LaunchConfiguration('use_robot_state_pub')
-  use_rviz = LaunchConfiguration('use_rviz')
-  use_simulator = LaunchConfiguration('use_simulator')
-  world = LaunchConfiguration('world')
- 
-  # Declare the launch arguments  
-  declare_use_sim_time_cmd = DeclareLaunchArgument(
-    name='use_sim_time',
-    default_value='True',
-    description='Use simulation (Gazebo) clock if true')
+    with open(original_yaml_path, 'r') as f:
+        yaml_data = yaml.safe_load(f)
 
-  declare_use_joint_state_publisher_cmd = DeclareLaunchArgument(
-    name='gui',
-    default_value='True',
-    description='Flag to enable joint_state_publisher_gui')
- 
-  declare_namespace_cmd = DeclareLaunchArgument(
-    name='namespace',
-    default_value='',
-    description='Top-level namespace')
- 
-  declare_use_namespace_cmd = DeclareLaunchArgument(
-    name='use_namespace',
-    default_value='False',
-    description='Whether to apply a namespace to the navigation stack')
- 
-  declare_rviz_config_file_cmd = DeclareLaunchArgument(
-    name='rviz_config_file',
-    default_value=default_rviz_config_path,
-    description='Full path to the RVIZ config file to use')
- 
-  declare_simulator_cmd = DeclareLaunchArgument(
-    name='headless',
-    default_value='False',
-    description='Whether to execute gzclient')
- 
-  declare_urdf_model_path_cmd = DeclareLaunchArgument(
-    name='urdf_model', 
-    default_value=default_urdf_model_path, 
-    description='Absolute path to robot urdf file')
- 
-  declare_use_robot_state_pub_cmd = DeclareLaunchArgument(
-    name='use_robot_state_pub',
-    default_value='True',
-    description='Whether to start the robot state publisher')
- 
-  declare_use_rviz_cmd = DeclareLaunchArgument(
-    name='use_rviz',
-    default_value='True',
-    description='Whether to start RVIZ')
- 
-  declare_use_simulator_cmd = DeclareLaunchArgument(
-    name='use_simulator',
-    default_value='True',
-    description='Whether to start the simulator')
- 
-  declare_world_cmd = DeclareLaunchArgument(
-    name='world',
-    default_value=world_path,
-    description='Full path to the world model file to load')
- 
-  # Subscribe to the joint states of the robot, and publish the 3D pose of each link.    
-  start_robot_state_publisher_cmd = Node(
-    package='robot_state_publisher',
-    executable='robot_state_publisher',
-    parameters=[{'robot_description': Command(['xacro ', urdf_model]),'use_sim_time': use_sim_time}]
+    namespaced_yaml = {}
+    for key, value in yaml_data.items():
+        namespaced_key = f"{namespace}/{key}"
+        namespaced_yaml[namespaced_key] = value
+
+    with open(namespaced_yaml_path, 'w') as f:
+        yaml.dump(namespaced_yaml, f)
+
+    return namespaced_yaml_path
+
+def launch_setup(context):
+
+    x = LaunchConfiguration('x_pose')
+    y = LaunchConfiguration('y_pose')
+    z = LaunchConfiguration('z_pose')
+
+    ranger_id = int(LaunchConfiguration('ranger_id').perform(context))
+    
+    spawn_rangers_cmds = []
+
+    namespace = f"ranger_mini_{ranger_id}"
+
+    generate_yaml_with_namespace(context, ranger_id)
+
+    pkg_four_ws_control = get_package_share_directory('four_ws_control')
+
+    # Path to the xacro file
+    xacro_file = PathJoinSubstitution([
+        FindPackageShare("ranger_mini"),
+        "urdf",
+        "ranger_mini_gazebo.xacro"
+    ])
+
+    robot_description_config = ParameterValue(Command(['xacro', ' ', xacro_file, ' id:=', f'{ranger_id}']), value_type=str)
+    
+    start_robot_state_publisher_cmd = TimerAction(
+        period=3.0,
+        actions=[
+            Node(
+                package='robot_state_publisher',
+                executable='robot_state_publisher',
+                namespace=namespace,
+                parameters=[{'robot_description': robot_description_config, 'use_sim_time': True, "frame_prefix": f'{namespace}/'}],
+                output="screen",
+            )
+        ]
     )
 
-  # Publish the joint states of the robot
-  start_joint_state_publisher_cmd = Node(
-    package='joint_state_publisher',
-    executable='joint_state_publisher',
-    name='joint_state_publisher',
-    condition=UnlessCondition(gui),
-    parameters=[{'use_sim_time': use_sim_time}])
-    
-  start_joint_state_publisher_gui_node = Node(
-    condition=IfCondition(gui),
-    package='joint_state_publisher_gui',
-    executable='joint_state_publisher_gui',
-    name='joint_state_publisher_gui',
-    parameters=[{'use_sim_time': use_sim_time}])
+    spawn_ranger_mini = Node(
+        package="ros_gz_sim",
+        executable="create",
+        namespace=namespace,
+        arguments=[
+            '-name', f'{namespace}',
+            '-topic', 'robot_description',
+            '-x', x,
+            '-y', y,
+            '-z', z,
+            '--ros-args', '--log-level', 'info'
+        ],
+        parameters=[{"use_sim_time": True}],
+        output='screen'
+    )
 
-  # Launch RViz
-  # start_rviz_cmd = Node(
-  #   package='rviz2',
-  #   executable='rviz2',
-  #   name='rviz2',
-  #   output='screen',
-  #   arguments=['-d', rviz_config_file])
+    gz_bridge = Node(
+        package='ros_gz_bridge',
+        executable='parameter_bridge',
+        name='gz_bridge',
+        arguments=[
+            f'{namespace}/scan@sensor_msgs/msg/LaserScan[gz.msgs.LaserScan',
+            f'{namespace}/imu_data@sensor_msgs/msg/Imu[gz.msgs.IMU',
+            f'{namespace}/navsat_data@gps_msgs/msg/GPSFix[gz.msgs.NavSat',
+            f'{namespace}/color/image_raw@sensor_msgs/msg/Image[gz.msgs.Image',
+            f'{namespace}/color/camera_info@sensor_msgs/msg/CameraInfo[gz.msgs.CameraInfo',
+            f'{namespace}/depth/image_raw/image@sensor_msgs/msg/Image[gz.msgs.Image',
+            f'{namespace}/depth/image_raw/depth_image@sensor_msgs/msg/Image[gz.msgs.Image',
+            f'{namespace}/depth/image_raw/points@sensor_msgs/msg/PointCloud2[gz.msgs.PointCloudPacked',
+            f'{namespace}/depth/image_raw/camera_info@sensor_msgs/msg/CameraInfo[gz.msgs.CameraInfo',
+                '--ros-args', '-p', 'expand_gz_topic_names:=true',
+            '--log-level', 'info'
+        ],
+        parameters=[{"use_sim_time": True}],
+        output='screen'
+    )
  
-  # Gazebo Classic
-  # # Start Gazebo server
-  # start_gazebo_server_cmd = IncludeLaunchDescription(
-  #   PythonLaunchDescriptionSource(os.path.join(pkg_gazebo_ros, 'launch', 'gzserver.launch.py')),
-  #   condition=IfCondition(use_simulator),
-  #   launch_arguments={'world': world}.items())
- 
-  # # Start Gazebo client    
-  # start_gazebo_client_cmd = IncludeLaunchDescription(
-  #   PythonLaunchDescriptionSource(os.path.join(pkg_gazebo_ros, 'launch', 'gzclient.launch.py')),
-  #   condition=IfCondition(PythonExpression([use_simulator, ' and not ', headless])))
- 
-  # # Launch the robot
-  # spawn_entity_cmd = Node(
-  #   package='gazebo_ros', 
-  #   executable='spawn_entity.py',
-  #   arguments=['-entity', robot_name_in_model, 
-  #               '-topic', 'robot_description',
-  #                   '-x', spawn_x_val,
-  #                   '-y', spawn_y_val,
-  #                   '-z', spawn_z_val,
-  #                   '-Y', spawn_yaw_val],
-  #                   output='screen')
+    controller = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(pkg_four_ws_control, 'launch', 'four_ws_control.launch.py')
+        ),
+        launch_arguments={'namespace':namespace}.items(),
+    )
 
-  # Spawn in Gazebo harmonic
-  spawn_ranger_mini = Node(
-      package="ros_gz_sim",
-      executable="create",
-      namespace=namespace,
-      arguments=[
-          '-name', f'{namespace}',
-          '-topic', 'robot_description',
-          '-x', '0',
-          '-y', '2',
-          '-z', '1',
-          '--ros-args', '--log-level', 'info'
-      ],
-      parameters=[{"use_sim_time": True}],
-      output='screen'
-  )
- 
-  controller = IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(
-                os.path.join(pkg_four_ws_control, 'launch', 'four_ws_control.launch.py')
-            ),
+    joint_state_broadcaster_spawner = Node(
+            package="controller_manager",
+            executable="spawner",
+            namespace=namespace,
+            arguments=["joint_state_broadcaster"],
+            parameters=[{"use_sim_time": True}],
+            output="screen"
         )
 
-  forward_position_controller = Node(
+    forward_position_controller = Node(
+            package="controller_manager",
+            executable="spawner",
+            namespace=namespace,
+            arguments=["forward_position_controller"],
+            parameters=[{"use_sim_time": True}],
+        )
+
+
+    forward_velocity_controller = Node(
+            package="controller_manager",
+            executable="spawner",
+            namespace=namespace,
+            arguments=["forward_velocity_controller"],
+            parameters=[{"use_sim_time": True}],
+        )
+    
+    ptz_camera_controller_spawner = Node(
         package="controller_manager",
         executable="spawner",
-        arguments=["forward_position_controller"],
+        namespace=namespace,
+        arguments=["ptz_camera_controller"],
+        parameters=[{"use_sim_time": True}],
     )
+    
+    spawn_rangers_cmds.append(start_robot_state_publisher_cmd)
+    spawn_rangers_cmds.append(spawn_ranger_mini)
+    spawn_rangers_cmds.append(gz_bridge)
+    spawn_rangers_cmds.append(controller)
+    spawn_rangers_cmds.append(joint_state_broadcaster_spawner)
+    spawn_rangers_cmds.append(forward_position_controller)
+    spawn_rangers_cmds.append(forward_velocity_controller)
+    # spawn_rangers_cmds.append(ptz_camera_controller_spawner)
 
+    return spawn_rangers_cmds
 
-  forward_velocity_controller = Node(
-        package="controller_manager",
-        executable="spawner",
-        arguments=["forward_velocity_controller"],
-    )
+def generate_launch_description():
 
-  joint_state_broadcaster_spawner = Node(
-        package="controller_manager",
-        executable="spawner",
-        arguments=["joint_state_broadcaster"],
-    )
-
-
-  # Create the launch description and populate
-  ld = LaunchDescription()
- 
-  # Declare the launch options
-  ld.add_action(declare_use_sim_time_cmd)
-  ld.add_action(declare_use_joint_state_publisher_cmd)
-  ld.add_action(declare_namespace_cmd)
-  ld.add_action(declare_use_namespace_cmd)
-  ld.add_action(declare_rviz_config_file_cmd)
-  ld.add_action(declare_simulator_cmd)
-  ld.add_action(declare_urdf_model_path_cmd)
-  ld.add_action(declare_use_robot_state_pub_cmd)  
-  ld.add_action(declare_use_rviz_cmd) 
-  ld.add_action(declare_use_simulator_cmd)
-  ld.add_action(declare_world_cmd)
- 
-  # Add any actions
-  # ld.add_action(start_gazebo_server_cmd)
-  # ld.add_action(start_gazebo_client_cmd)
-  # ld.add_action(spawn_entity_cmd)
-  ld.add_action(spawn_ranger_mini)
-  ld.add_action(start_robot_state_publisher_cmd)
-  ld.add_action(start_joint_state_publisher_cmd)
-  ld.add_action(controller)
-
-  ld.add_action(forward_position_controller)
-  ld.add_action(forward_velocity_controller)
-  ld.add_action(joint_state_broadcaster_spawner)
-
-
-  # ld.add_action(start_dummy_sensors)
-  # ld.add_action(start_rviz_cmd)
- 
-  return ld
+    return LaunchDescription([
+        DeclareLaunchArgument('x_pose', default_value='0.0'),
+        DeclareLaunchArgument('y_pose', default_value='2.0'),
+        DeclareLaunchArgument('z_pose', default_value='1.0'),
+        DeclareLaunchArgument('ranger_id', default_value='1'),
+        OpaqueFunction(function=launch_setup)
+    ])
