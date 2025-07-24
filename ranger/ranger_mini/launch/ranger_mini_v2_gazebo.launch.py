@@ -13,6 +13,7 @@ from launch.event_handlers import OnProcessExit
 from ament_index_python.packages import get_package_share_directory
 
 def generate_yaml_with_namespace(context, ranger_id):
+    """Generate a yaml file for the controllers, including the namespace"""
     namespace = f"ranger_mini_{ranger_id}"
     original_yaml_path = os.path.join(
         FindPackageShare("ranger_mini").perform(context),
@@ -46,6 +47,7 @@ def launch_setup(context):
 
     namespace = f"ranger_mini_{ranger_id}"
 
+    # Create a temporary configuration file for the controllers, adding the namespace in it
     generate_yaml_with_namespace(context, ranger_id)
 
     pkg_four_ws_control = get_package_share_directory('four_ws_control')
@@ -57,9 +59,10 @@ def launch_setup(context):
         "ranger_mini_gazebo.xacro"
     ])
 
+    # Robot's description (urdf generated from the xacro file, thanks to the command xacro)
     robot_description_config = ParameterValue(Command(['xacro', ' ', xacro_file, ' id:=', f'{ranger_id}']), value_type=str)
     
-    start_robot_state_publisher_cmd = TimerAction(
+    start_robot_state_publisher_cmd = TimerAction( # Wait 3s before launching this node, which seems to help the controllers to load correctly
         period=3.0,
         actions=[
             Node(
@@ -88,6 +91,7 @@ def launch_setup(context):
         output='screen'
     )
 
+    # Bridge sensors topics from Gazebo to ROS2
     gz_bridge = Node(
         package='ros_gz_bridge',
         executable='parameter_bridge',
@@ -109,6 +113,7 @@ def launch_setup(context):
         output='screen'
     )
  
+    # Launch file allowing to control the ranger mini via velocity commands in the cmd_vel topic
     controller = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(pkg_four_ws_control, 'launch', 'four_ws_control.launch.py')
@@ -116,6 +121,10 @@ def launch_setup(context):
         launch_arguments={'namespace':namespace}.items(),
     )
 
+    # Controllers
+
+    # Warning : Unlike the Summit XL's controllers, these ones load very inconsistently, making Ranger Mini's integration difficult
+    
     joint_state_broadcaster_spawner = Node(
             package="controller_manager",
             executable="spawner",
@@ -142,6 +151,7 @@ def launch_setup(context):
             parameters=[{"use_sim_time": True}],
         )
     
+    # Camera controller, remove for now because of the instability of ranger's controllers
     ptz_camera_controller_spawner = Node(
         package="controller_manager",
         executable="spawner",
